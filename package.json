@@ -1,0 +1,32 @@
+{
+  "name": "rsocket-rxjs",
+  "version": "0.1.0",
+  "description": "RSocket Protocol Client Implementation",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "scripts": {
+    "test": "jest --forceExit"
+  },
+  "keywords": [
+    "RSocket",
+    "Websocket",
+    "Reactive",
+    "RxJs",
+    "Client",
+    "Bidirectional"
+  ],
+  "files": [
+    "/dist"
+  ],
+  "author": "Jascha Riedel",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "rxjs": "^7.1.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^26.0.23",
+    "jest": "^27.0.4",
+    "ts-jest": "^27.0.3",
+    "typescript": "^4.3.2"
+  }
+}
