@@ -42,7 +42,7 @@ const responder = new RSocketRoutingResponder(mimeTypeRegistry); // this is a ro
 const client = new RSocketClient(transport, responder, mimeTypeRegistry); // The client that handles the socket/transport
 const requester = new RSocketRoutingRequester(client); // A requester that wraps the client and allows for routed requests
 
-// Add handler for route "request"
+// Add handler for route "test"
 responder.addRequestResponseHandler('test', ans => {
     console.log('Received a request on route "test"');
     return ans + ans;
