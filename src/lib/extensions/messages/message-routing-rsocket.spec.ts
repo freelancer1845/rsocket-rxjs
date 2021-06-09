@@ -15,13 +15,13 @@ global.WebSocket = WebSocket
 describe("request_patterns", () => {
     let socket: MessageRoutingRSocket;
     beforeAll(done => {
-
+        const registry = MimeTypeRegistry.defaultRegistry();
         const transport = new WebsocketTransport("ws://localhost:8080/rsocket");
-        const responder = new RSocketRoutingResponder(MimeTypeRegistry.defaultRegistry());
-        const client = new RSocketClient(transport, responder, MimeTypeRegistry.defaultRegistry());
+        const responder = new RSocketRoutingResponder(registry);
+        const client = new RSocketClient(transport, responder, registry);
         const requester = new RSocketRoutingRequester(client);
         socket = new MessageRoutingRSocket(responder, requester);
-        socket.addRequestResponseHandler('/basic/setup-payload', ans => {
+        responder.addRequestResponseHandler('/basic/setup-payload', ans => {
             expect(ans).toEqual('Test-Client');
             done();
             return ans;
@@ -42,7 +42,6 @@ describe("request_patterns", () => {
             minorVersion: 0,
             maxLifetime: 100000,
         });
-
 
     })
     it("Returns Request Response payload", done => {
