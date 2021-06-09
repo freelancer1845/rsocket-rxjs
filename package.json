@@ -2,8 +2,8 @@
   "name": "rsocket-rxjs",
   "version": "0.1.0",
   "description": "RSocket Protocol Client Implementation",
-  "main": "index.js",
-  "types": "index.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "scripts": {
     "test": "jest --forceExit"
   },
@@ -21,7 +21,7 @@
   "author": "Jascha Riedel",
   "license": "Apache-2.0",
   "dependencies": {
-    "rxjs": "^7.1.0"
+    "rxjs": "^6.5.3"
   },
   "devDependencies": {
     "@types/jest": "^26.0.23",

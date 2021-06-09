@@ -1,6 +1,7 @@
 import { BehaviorSubject, range, timer } from "rxjs";
 import { concatMap, flatMap, reduce } from 'rxjs/operators';
-import { MimeType, MimeTypeRegistry } from "../../api/rsocket-mime.types";
+import { RSocketBuilder } from "../../api/rsocket-factory";
+import { CompositeMetaData, MimeType, MimeTypeRegistry } from "../../api/rsocket-mime.types";
 import { RSocketClient } from "../../core/rsocket-client.impl";
 import { WebsocketTransport } from "../../core/transport/websocket-transport.impl";
 import { MessageRoutingRSocket } from "./message-routing-rsocket";
@@ -29,12 +30,19 @@ describe("request_patterns", () => {
             data: 'Test-Client',
             dataMimeType: MimeType.APPLICATION_JSON,
             metadataMimeType: MimeType.MESSAGE_X_RSOCKET_COMPOSITE_METADATA,
+            metaData: [
+                {
+                    type: MimeType.MESSAGE_X_RSOCKET_ROUTING,
+                    data: 'connect-client'
+                }
+            ],
             honorsLease: false,
             keepaliveTime: 30000,
             majorVersion: 1,
             minorVersion: 0,
             maxLifetime: 100000,
         });
+
 
     })
     it("Returns Request Response payload", done => {

@@ -12,7 +12,6 @@ export class FluentRequest<O, I> {
         private _outgoingMimeType?: MimeType<O>,
         private _incomingMimeType?: MimeType<I>,
         private _authentication?: Authentication,
-        private _requester?: Observable<number>,
     ) {
     }
 
@@ -23,27 +22,27 @@ export class FluentRequest<O, I> {
     }
 
     private copy() {
-        return new FluentRequest(this.requester, this._route, this._data, this._outgoingMimeType, this._incomingMimeType, this._authentication, this._requester);
+        return new FluentRequest(this.requester, this._route, this._data, this._outgoingMimeType, this._incomingMimeType, this._authentication);
     }
 
     public requestMimetype<L>(type: MimeType<L>): FluentRequest<L, I> {
-        return new FluentRequest(this.requester, this._route, this._data, type, this._incomingMimeType, this._authentication, this._requester);
+        return new FluentRequest(this.requester, this._route, this._data, type, this._incomingMimeType, this._authentication);
     }
 
     public answerMimetype<L>(type: MimeType<L>): FluentRequest<O, L> {
-        return new FluentRequest(this.requester, this._route, this._data, this._outgoingMimeType, type, this._authentication, this._requester);
+        return new FluentRequest(this.requester, this._route, this._data, this._outgoingMimeType, type, this._authentication);
     }
 
     public authentication(auth: Authentication): FluentRequest<O, I> {
-        return new FluentRequest(this.requester, this._route, this._data, this._outgoingMimeType, this._incomingMimeType, auth, this._requester);
+        return new FluentRequest(this.requester, this._route, this._data, this._outgoingMimeType, this._incomingMimeType, auth);
     }
 
     public requestResponse(): Observable<I> {
         return this.requester.requestResponse(this._route, this._data, this._outgoingMimeType, this._incomingMimeType, this._authentication);
     }
 
-    public requestStream(): Observable<I> {
-        return this.requester.requestStream(this._route, this._data, this._outgoingMimeType, this._incomingMimeType, this._authentication, this._requester);
+    public requestStream(requester?: Observable<number>): Observable<I> {
+        return this.requester.requestStream(this._route, this._data, this._outgoingMimeType, this._incomingMimeType, this._authentication, requester);
     }
 
     public fireAndForget(): void {
