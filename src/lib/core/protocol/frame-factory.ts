@@ -1,5 +1,4 @@
-import { MimeTypeRegistry } from '../../api/rsocket-mime.types';
-import { stringToUtf8ArrayBuffer } from '../../utlities/conversions';
+import { stringToAsciiArrayBuffer, stringToUtf8ArrayBuffer } from '../../utlities/conversions';
 import { RSocketConfig } from '../config/rsocket-config';
 import { ErrorCode, Frame, FrameType } from "./frame";
 import { Payload } from "./payload";
@@ -98,11 +97,10 @@ export class SetupFrameBuilder extends FrameBuilder {
         this.writerIndex = 18; // First 18 bytes are reserved
     }
 
-    public buildFromConfig(config: RSocketConfig<any, any>, mimeTypeRegistry: MimeTypeRegistry): Frame {
+    public buildFromConfig(config: RSocketConfig): Frame {
         this.streamId(0);
 
-
-        if (config.metaData != undefined) {
+        if (config.setupPayload.hasMetadata()) {
             this.flagMetadataPresent();
         }
         if (config.honorsLease) {
@@ -118,15 +116,16 @@ export class SetupFrameBuilder extends FrameBuilder {
             this.writerIndex = 2 + config.resumeIdentificationToken.byteLength;
         }
 
-        this.mimeType(config.metadataMimeType.toBuffer());
-        this.mimeType(config.dataMimeType.toBuffer());
-        if (config.data != undefined && config.metaData != undefined) {
-            this.payload(new Payload(config.dataMimeType.coder.encoder(config.data, mimeTypeRegistry), config.metadataMimeType.coder.encoder(config.metaData, mimeTypeRegistry)));
-        } else if (config.data == undefined && config.metaData != undefined) {
-            this.payload(new Payload(new Uint8Array(0), config.metadataMimeType.coder.encoder(config.metaData, mimeTypeRegistry)));
-        } else if (config.data != undefined && config.metaData == undefined) {
-            this.payload(new Payload(config.dataMimeType.coder.encoder(config.data, mimeTypeRegistry)));
-        }
+        this.mimeType(stringToAsciiArrayBuffer(config.metadataMimeType));
+        this.mimeType(stringToAsciiArrayBuffer(config.dataMimeType));
+        this.payload(config.setupPayload);
+        // if (config.data != undefined && config.metaData != undefined) {
+        //     this.payload(new Payload(config.dataMimeType.coder.encoder(config.data, mimeTypeRegistry), config.metadataMimeType.coder.encoder(config.metaData, mimeTypeRegistry)));
+        // } else if (config.data == undefined && config.metaData != undefined) {
+        //     this.payload(new Payload(new Uint8Array(0), config.metadataMimeType.coder.encoder(config.metaData, mimeTypeRegistry)));
+        // } else if (config.data != undefined && config.metaData == undefined) {
+        //     this.payload(new Payload(config.dataMimeType.coder.encoder(config.data, mimeTypeRegistry)));
+        // }
         return new Frame(new Uint8Array(this.buffer, 0, this.writerIndex));
     }
 
@@ -178,30 +177,32 @@ export class SetupFrameBuilder extends FrameBuilder {
         this.requireMinFreeBytes(mimeType.byteLength + 1);
         const int8View = new Uint8Array(this.buffer, this.writerIndex);
         int8View[0] = mimeType.byteLength;
-        int8View.set(new Uint8Array(mimeType), 1);
+
+        int8View.set(mimeType, 1);
         this.writerIndex += 1 + mimeType.byteLength;
     }
 
     payload(payload: Payload) {
-        const uint8View = new Uint8Array(this.buffer, this.writerIndex);
+        let targetView: Uint8Array;
         if (payload.hasMetadata()) {
             this.requireMinFreeBytes(3 + payload.metadata.byteLength + payload.data.byteLength);
+            targetView = new Uint8Array(this.buffer, this.writerIndex);
             this.writerIndex += 3 + payload.metadata.byteLength + payload.data.byteLength;
         } else {
             this.requireMinFreeBytes(payload.data.byteLength);
+            targetView = new Uint8Array(this.buffer, this.writerIndex);
             this.writerIndex += payload.data.byteLength;
         }
         let position = 0;
         if (payload.hasMetadata()) {
             const length = payload.metadata.byteLength;
-            uint8View[position++] = length >> 16 & 0xFF;
-            uint8View[position++] = length >> 8 & 0xFF;
-            uint8View[position++] = length & 0xFF;
-            uint8View.set(new Uint8Array(payload.metadata), position);
+            targetView[position++] = length >> 16 & 0xFF;
+            targetView[position++] = length >> 8 & 0xFF;
+            targetView[position++] = length & 0xFF;
+            targetView.set(payload.metadata, position);
             position += payload.metadata.byteLength;
         }
-        uint8View.set(new Uint8Array(payload.data), position);
-
+        targetView.set(payload.data, position);
     }
 
 

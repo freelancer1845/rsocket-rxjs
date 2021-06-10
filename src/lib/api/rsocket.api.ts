@@ -1,7 +1,6 @@
-import { Observable, Subject } from "rxjs";
+import { Observable } from "rxjs";
 import { RSocketConfig } from '../core/config/rsocket-config';
 import { Payload } from '../core/protocol/payload';
-import { MimeTypeRegistry } from "./rsocket-mime.types";
 
 
 export enum RSocketState {
@@ -23,20 +22,19 @@ export type RequestResponseHandler = (payload: Payload) => Observable<Payload>;
 export type RequestStreamHandler = (payload: Payload) => { stream: Observable<Payload>, backpressureStrategy: BackpressureStrategy };
 export type RequestFNFHandler = (payload: Payload) => void;
 
-export interface RSocket {
+export interface RSocket<RequestPayload, ResponsePayload, RequestOptions = never> {
 
     responder: RSocketResponder;
 
-    establish(config: RSocketConfig<any, any>): void;
+    // establish(config: RSocketConfig<any, any>): void;
     close(): Observable<void>;
     state(): Observable<RSocketState>;
 
-    requestResponse(payload: Payload): Observable<Payload>;
-    requestStream(payload: Payload): Observable<Payload>;
-    requestStream(payload: Payload, requester?: Observable<number>): Observable<Payload>;
-    requestFNF(payload: Payload): void;
+    requestResponse(payload: RequestPayload, options?: RequestOptions): Observable<ResponsePayload>;
+    requestStream(payload: RequestPayload, requester?: Observable<number>, options?: RequestOptions): Observable<ResponsePayload>;
+    requestFNF(payload: RequestPayload, options?: RequestOptions): void;
 
-    readonly mimeTypeRegistry: MimeTypeRegistry;
+    getSetupConfig(): RSocketConfig;
 }
 
 export interface RSocketResponder {

@@ -1,8 +1,6 @@
 import { BehaviorSubject, interval, merge, Notification, Observable, race, Subject, throwError } from "rxjs";
-import { concatMap, delayWhen, dematerialize, filter, flatMap, map, materialize, mergeMap, repeatWhen, skipWhile, switchMap, take, takeUntil, takeWhile, tap, timeout } from "rxjs/operators";
-import { MimeTypeRegistry } from "../api/rsocket-mime.types";
-import { BackpressureStrategy, RequestFNFHandler, RequestResponseHandler, RequestStreamHandler, RSocket, RSocketResponder, RSocketState } from '../api/rsocket.api';
-import { arrayBufferToUtf8String } from '../utlities/conversions';
+import { concatMap, delayWhen, dematerialize, filter, map, materialize, mergeMap, repeatWhen, skipWhile, switchMap, take, takeUntil, takeWhile, tap, timeout } from "rxjs/operators";
+import { BackpressureStrategy, RSocket, RSocketResponder, RSocketState } from '../api/rsocket.api';
 import { factory } from "./config-log4j";
 import { RSocketConfig } from "./config/rsocket-config";
 import { FragmentContext } from './protocol/fragments';
@@ -14,11 +12,11 @@ import { Transport } from "./transport/transport.api";
 const protocolLog = factory.getLogger('protocol.RSocketClient');
 const log = factory.getLogger('.RSocketClient');
 
-export class RSocketClient implements RSocket {
+export class RSocketClient implements RSocket<Payload, Payload> {
 
     private _state: BehaviorSubject<RSocketState> = new BehaviorSubject<RSocketState>(RSocketState.Disconnected);
     private _incoming: Subject<Frame> = new Subject();
-    private _config: RSocketConfig<any, any> | undefined;
+    private _config: RSocketConfig | undefined;
 
     private streamIdsHolder: number[] = [];
     private streamIdCounter = 0;
@@ -30,16 +28,18 @@ export class RSocketClient implements RSocket {
     constructor(
         private readonly transport: Transport,
         public readonly responder: RSocketResponder,
-        public readonly mimeTypeRegistry: MimeTypeRegistry
     ) {
         this.incomingHandlerSetup();
+    }
+    getSetupConfig(): RSocketConfig {
+        return this._config;
     }
     state(): Observable<RSocketState> {
         return this._state;
     }
 
 
-    public establish(config: RSocketConfig<any, any>): void {
+    public establish(config: RSocketConfig): void {
         this._config = config;
         this.transport.incoming().pipe(
             takeUntil(this.$destroy)
@@ -58,7 +58,7 @@ export class RSocketClient implements RSocket {
                 this._state.next(RSocketState.Disconnected);
             }
         });
-        const setupFrame = FrameBuilder.setup().buildFromConfig(config, this.mimeTypeRegistry);
+        const setupFrame = FrameBuilder.setup().buildFromConfig(config);
         if (config.honorsLease == false) {
             protocolLog.debug('Sending Setup frame without honoring lease...');
             this.transport.send(setupFrame);
@@ -77,12 +77,12 @@ export class RSocketClient implements RSocket {
     private incomingHandlerSetup() {
         this._incoming.pipe(
             filter(f => f.type() == FrameType.REQUEST_RESPONSE),
-            flatMap(f => this.incomingRequestResponse(f)),
+            mergeMap(f => this.incomingRequestResponse(f)),
             takeUntil(this.$destroy)
         ).subscribe(frame => this.transport.send(frame));
         this._incoming.pipe(
             filter(f => f.type() == FrameType.REQUEST_STREAM),
-            flatMap(f => this.incomingRequestStream(f)),
+            mergeMap(f => this.incomingRequestStream(f)),
             takeUntil(this.$destroy)
         ).subscribe(frame => this.transport.send(frame));
         this._incoming.pipe(
@@ -216,7 +216,7 @@ export class RSocketClient implements RSocket {
         return this._state.pipe(
             filter(s => s == RSocketState.Connected),
             take(1),
-            flatMap(s => merge(obs.pipe(materialize()), this.connectionFailedObservable().pipe(materialize()))),
+            mergeMap(s => merge(obs.pipe(materialize()), this.connectionFailedObservable().pipe(materialize()))),
             takeWhile(notification => notification.hasValue),
             dematerialize()
         );

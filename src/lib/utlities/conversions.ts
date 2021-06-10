@@ -4,6 +4,14 @@ export function stringToUtf8ArrayBuffer(_string: string) {
     return new TextEncoder().encode(_string);
 }
 
+export function stringToAsciiArrayBuffer(_string: string) {
+    const buffer = new Uint8Array(_string.length);
+    for (let i = 0; i < _string.length; i++) {
+        buffer[i] = _string.charCodeAt(i) & 0xFF;
+    }
+    return buffer;
+}
+
 export function arrayBufferToUtf8String(buffer: Uint8Array) {
     return new TextDecoder('utf-8').decode(buffer);
 }

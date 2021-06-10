@@ -49,7 +49,9 @@ export function frameToString(frame: Frame, fromClient: boolean): string {
     }
 
     if (frame.type() == FrameType.SETUP) {
-        return `Frame Type: ${frameType}\n| Stream Id = ${frame.streamId()} ${originTag} ----|\n| Major Version = ${frame.majorVersion()} | Minor Version = ${frame.minorVersion()} ---\n| Keepalive Time = ${frame.timeBetweenKeeaplive()}---\n| Max Lifetime = ${frame.maxLifetime()} ---\n| MetaData Mime Type = ${arrayBufferToUtf8String(frame.metadataMimeType())} ----\n| Data Mime Type = ${arrayBufferToUtf8String(frame.dataMimeType())}`;
+        return `Frame Type: ${frameType} - Length ${frame.buffer.byteLength}----\n| Stream Id = ${frame.streamId()} ${originTag} ----|\n| Major Version = ${frame.majorVersion()} | Minor Version = ${frame.minorVersion()} ---\n| Keepalive Time = ${frame.timeBetweenKeeaplive()}---\n| Max Lifetime = ${frame.maxLifetime()} ---\n| MetaData Mime Type = ${arrayBufferToUtf8String(frame.metadataMimeType())} ----\n| Data Mime Type = ${arrayBufferToUtf8String(frame.dataMimeType())}`;
+    } else if (frame.type() == FrameType.ERROR) {
+        return `Frame Type: ${frameType} - Length ${frame.buffer.byteLength}----\n| Stream Id = ${frame.streamId()} ${originTag}\n###Error Message:###\n ${arrayBufferToUtf8String(frame.payload().data)}`;
     } else {
         return `Frame Type: ${frameType} - Length ${frame.buffer.byteLength}----\n| Stream Id = ${frame.streamId()} ${originTag}`
     }

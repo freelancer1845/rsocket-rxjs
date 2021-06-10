@@ -1,88 +1,238 @@
-import { Observable } from "rxjs";
-import { Authentication, CompositeMetaData, MimeType } from '../../api/rsocket-mime.types';
-import { BackpressureStrategy } from '../../api/rsocket.api';
-import { RSocketRoutingRequester } from "./rsocket-routing-requester";
+import { Observable, of } from "rxjs";
+import { map } from "rxjs/operators";
+import { RSocketConfig } from "../../..";
+import { RSocket, RSocketState } from '../../api/rsocket.api';
+import { Payload } from "../../core/protocol/payload";
+import { CompositeMetadata } from "../composite-metadata";
+import { decodeAuthentication, decodeMessageRoute, encodeAuthentication, encodeMessageRoute } from "../encoder/message-x-rsocket";
+import { DecodedPayload, EncodingRSocket, RSocketEncoderRequestOptions } from "../encoding-rsocket-client";
+import { Authentication } from "../security/authentication";
+import { WellKnownMimeTypes } from "../well-known-mime-types";
 import { RSocketRoutingResponder } from "./rsocket-routing-responder";
 
+export interface RoutedPayload extends DecodedPayload {
+    route: string;
+    authentication?: Authentication;
+    metadata?: CompositeMetadata;
+}
+
+export type MessagePayloadType = 'dataOnly' | 'decodedPayload';
+
+export interface MessageRoutingOptions<PayloadType extends MessagePayloadType> {
+    payloadType: PayloadType;
+    encodingOptions?: RSocketEncoderRequestOptions
+}
+
+export class MessageRoutingRSocket implements RSocket<RoutedPayload, DecodedPayload, RSocketEncoderRequestOptions> {
+
+    public readonly _responder: RSocketRoutingResponder;
+
+    constructor(public readonly parent: EncodingRSocket) {
+        this._responder = new RSocketRoutingResponder(parent);
+        parent.setResponder(this._responder);
+
+        parent.addDecoder({
+            mimeType: WellKnownMimeTypes.MESSAGE_X_RSOCKET_ROUTING_V0.name,
+            decode: decodeMessageRoute
+        }).addEncoder({
+            mimeType: WellKnownMimeTypes.MESSAGE_X_RSOCKET_ROUTING_V0.name,
+            encode: encodeMessageRoute
+        }).addDecoder({
+            mimeType: WellKnownMimeTypes.MESSAGE_X_RSOCKET_AUTHENTICATION_V0.name,
+            decode: decodeAuthentication
+        }).addEncoder({
+            mimeType: WellKnownMimeTypes.MESSAGE_X_RSOCKET_AUTHENTICATION_V0.name,
+            encode: encodeAuthentication
+        });
+    }
+
+    get responder(): RSocketRoutingResponder {
+        return this._responder;
+    }
 
 
+    simpleRequestResponse(route: string, data?: any, authentication?: Authentication): Observable<any> {
+        return this.requestResponse({
+            route: route,
+            data: data,
+            authentication: authentication
+        }).pipe(map(res => res.data));
+    }
 
-export class MessageRoutingRSocket {
 
+    requestResponse(payload: RoutedPayload, options?: RSocketEncoderRequestOptions): Observable<DecodedPayload<any, any>> {
+        if (this._isCompositeMetadataRequest(payload)) {
+            return this.parent.requestResponse(
+                {
+                    data: payload.data,
+                    dataMimeType: payload.dataMimeType,
+                    metadata: this._constructCompositeMetadata(payload),
+                    metadataMimeType: WellKnownMimeTypes.MESSAGE_X_RSOCKET_COMPOSITE_METADATA_V0.name
+                },
+                options
+            )
+        } else {
+            throw new Error('Only CompositeMetaData requests are implemented');
+        }
+    }
 
-    constructor(
-        public readonly responder: RSocketRoutingResponder,
-        public readonly requester: RSocketRoutingRequester,
+    simpleRequestStream(route: string, data?: any, requester?: Observable<number>, authentication?: Authentication): Observable<any> {
+        return this.requestStream({
+            route: route,
+            data: data,
+            authentication: authentication
+        }, requester).pipe(map(ans => ans.data));
+    }
+    requestStream(payload: RoutedPayload, requester?: Observable<number>, options?: RSocketEncoderRequestOptions): Observable<DecodedPayload<any, any> | Payload> {
+        if (this._isCompositeMetadataRequest(payload)) {
+            return this.parent.requestStream(
+                {
+                    data: payload.data,
+                    dataMimeType: payload.dataMimeType,
+                    metadata: this._constructCompositeMetadata(payload),
+                    metadataMimeType: WellKnownMimeTypes.MESSAGE_X_RSOCKET_COMPOSITE_METADATA_V0.name
+                },
+                requester,
+                options
+            )
+        } else {
+            throw new Error('Only CompositeMetaData requests are implemented');
+        }
+
+    }
+
+    simpleRequestFNF(route: string, data?: any, authentication?: Authentication) {
+        this.requestFNF({
+            route: route,
+            data: data,
+            authentication: authentication
+        });
+    }
+    requestFNF(payload: RoutedPayload): void {
+        if (this._isCompositeMetadataRequest(payload)) {
+            return this.parent.requestFNF(
+                {
+                    data: payload.data,
+                    dataMimeType: payload.dataMimeType,
+                    metadata: this._constructCompositeMetadata(payload),
+                    metadataMimeType: WellKnownMimeTypes.MESSAGE_X_RSOCKET_COMPOSITE_METADATA_V0.name
+                }
+            )
+        } else {
+            throw new Error('Only CompositeMetaData requests are implemented');
+        }
+    }
+
+    public addRequestResponseHandler<RequestType, ResponseType = any>(route: string,
+        handler: (requestData: RequestType, metadata?: CompositeMetadata) => Observable<ResponseType> | ResponseType,
+        options?: MessageRoutingOptions<'dataOnly'>);
+    public addRequestResponseHandler<RequestType>(route: string,
+        handler: (requestData: RequestType, metadata?: CompositeMetadata) => Observable<DecodedPayload> | DecodedPayload,
+        options?: MessageRoutingOptions<'decodedPayload'>);
+
+    public addRequestResponseHandler<RequestType = any, ResponseType = DecodedPayload | any>(
+        route: string,
+        handler: (requestData: RequestType, metadata?: CompositeMetadata) => Observable<ResponseType> | ResponseType,
+        options: MessageRoutingOptions<MessagePayloadType> = {
+            payloadType: 'dataOnly'
+        }
     ) {
+        let mappingHandler = (payload: DecodedPayload<any, any>) => {
+            const handlerResponse = handler(payload.data, payload.metadata);
+            let responseObservable: Observable<ResponseType>;
+            if (handlerResponse instanceof Observable) {
+                responseObservable = handlerResponse;
+            } else {
+                responseObservable = of(handlerResponse);
+            }
+            if (options.payloadType === 'dataOnly') {
+                return responseObservable.pipe(map(v => ({ data: v })));
+            } else if (options.payloadType === 'decodedPayload') {
+                return responseObservable;
+            }
+        }
+
+        this.responder.addRequestResponseHandler(
+            route,
+            mappingHandler,
+            options?.encodingOptions
+        )
     }
 
-
-    public requestResponse<O, I>(
+    public addRequestStreamHandler<RequestType, ResponseType = any>(
         route: string,
-        payload?: O,
-        outgoingMimeType: MimeType<O> = MimeType.APPLICATION_JSON,
-        incomingMimeType: MimeType<I> = MimeType.APPLICATION_JSON,
-        authentication?: Authentication): Observable<I> {
-        return this.requester.requestResponse(route, payload, outgoingMimeType, incomingMimeType, authentication);
-    }
-
-    public requestStream<O, I>(
-        route: string, payload?: O,
-        outgoingMimeType: MimeType<O> = MimeType.APPLICATION_JSON,
-        incomingMimeType: MimeType<I> = MimeType.APPLICATION_JSON,
-        authentication?: Authentication,
-        requester?: Observable<number>): Observable<I> {
-        return this.requester.requestStream(route, payload, outgoingMimeType, incomingMimeType, authentication, requester);
-    }
-
-    public requestFNF<O>(
+        handler: (requestData: RequestType, metadata?: CompositeMetadata) => Observable<ResponseType> | ResponseType,
+        options?: MessageRoutingOptions<'dataOnly'>
+    );
+    public addRequestStreamHandler<RequestType>(
         route: string,
-        payload?: O,
-        payloadMimeType: MimeType<O> = MimeType.APPLICATION_JSON,
-        authentication?: Authentication
-    ): void {
-        this.requester.requestFNF(route, payload, payloadMimeType, authentication);
-
+        handler: (requestData: RequestType, metadata?: CompositeMetadata) => Observable<DecodedPayload> | DecodedPayload,
+        options?: MessageRoutingOptions<'decodedPayload'>
+    );
+    public addRequestStreamHandler<RequestType, ResponseType = DecodedPayload | any>(
+        route: string,
+        handler: (requestData: RequestType, metadata?: CompositeMetadata) => Observable<ResponseType> | ResponseType,
+        options: MessageRoutingOptions<MessagePayloadType> = {
+            payloadType: 'dataOnly'
+        }
+    ) {
+        this.responder.addRequestStreamHandler(
+            route,
+            this._createMappingHandler(handler, options),
+            options?.encodingOptions
+        );
     }
 
 
-    /**
-     * @deprecated Configure using the responder provided to the rsocket
-     * @param topic 
-     * @param handler 
-     * @param incomingMimeType 
-     * @param outgoingMimeType 
-     */
-    public addRequestResponseHandler(
-        topic: string,
-        handler: (payload: any) => Observable<any> | any,
-        incomingMimeType = MimeType.APPLICATION_JSON,
-        outgoingMimeType = MimeType.APPLICATION_JSON,
-    ): void {
-        this.responder.addRequestResponseHandler(topic, handler, incomingMimeType, outgoingMimeType);
-    }
-
-    /**
-     * @deprecated Configure using the responder provided to the rsocket
-     * @param topic 
-     * @param handler 
-     * @param incomingMimeType 
-     * @param outgoingMimeType 
-     */
-    public addRequestStreamHandler(
-        topic: string,
-        handler: (payload: any) => Observable<any> | any,
-        incomingMimeType = MimeType.APPLICATION_JSON,
-        outgoingMimeType = MimeType.APPLICATION_JSON,
-        backpressureStrategy: BackpressureStrategy = BackpressureStrategy.BufferDelay,
-    ): void {
-        this.responder.addRequestStreamHandler(topic, handler, incomingMimeType, outgoingMimeType, backpressureStrategy);
+    private _createMappingHandler<RequestType, ResponseType>(handler: (requestData: RequestType, metadata?: CompositeMetadata) => Observable<ResponseType> | ResponseType,
+        options: MessageRoutingOptions<MessagePayloadType>) {
+        let mappingHandler = (payload: DecodedPayload<any, any>) => {
+            const handlerResponse = handler(payload.data, payload.metadata);
+            let responseObservable: Observable<ResponseType>;
+            if (handlerResponse instanceof Observable) {
+                responseObservable = handlerResponse;
+            } else {
+                responseObservable = of(handlerResponse);
+            }
+            if (options.payloadType === 'dataOnly') {
+                return responseObservable.pipe(map(v => ({ data: v })));
+            } else if (options.payloadType === 'decodedPayload') {
+                return responseObservable;
+            }
+        }
+        return mappingHandler;
     }
 
 
+    close(): Observable<void> {
+        return this.parent.close();
+    }
+    state(): Observable<RSocketState> {
+        return this.parent.state();
+    }
+    getSetupConfig(): RSocketConfig {
+        return this.parent.getSetupConfig();
+    }
 
+    private _isCompositeMetadataRequest(payload: RoutedPayload): boolean {
+        return (payload.metadataMimeType && payload.metadataMimeType == WellKnownMimeTypes.MESSAGE_X_RSOCKET_COMPOSITE_METADATA_V0.name)
+            || this.getSetupConfig().metadataMimeType == WellKnownMimeTypes.MESSAGE_X_RSOCKET_COMPOSITE_METADATA_V0.name;
+    }
 
+    private _constructCompositeMetadata(payload: RoutedPayload): CompositeMetadata {
+        const metadata = payload.metadata == undefined ? new CompositeMetadata() : payload.metadata;
+        metadata.push({
+            mimeType: WellKnownMimeTypes.MESSAGE_X_RSOCKET_ROUTING_V0.name,
+            data: payload.route
+        });
+        if (payload.authentication) {
+            metadata.push({
+                mimeType: WellKnownMimeTypes.MESSAGE_X_RSOCKET_AUTHENTICATION_V0.name,
+                data: payload.authentication
+            });
+        }
+        return metadata;
 
-
+    }
 
 }
