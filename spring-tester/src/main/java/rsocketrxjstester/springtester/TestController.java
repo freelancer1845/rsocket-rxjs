@@ -27,7 +27,7 @@ public class TestController {
         if (client == null) {
             System.out.println("No setup payload provided");
         } else {
-            requester.route("/basic/setup-payload").data(client).retrieveMono(String.class).subscribe();
+            requester.route("/basic/setup-payload").data(client).retrieveMono(String.class).subscribe(response -> System.out.println(response));
             System.out.println(client);
         }
     }
@@ -81,7 +81,7 @@ public class TestController {
 
     @MessageMapping("/basic/fnf-reverse-request-response")
     public void reverseFnfRequestResponse(Request request, RSocketRequester requester) {
-        requester.route(request.topic).data("\"" + request.data+ "\"").retrieveMono(String.class).subscribe();
+        requester.route(request.topic).data("\"" + request.data + "\"").retrieveMono(String.class).subscribe();
     }
 
     @MessageMapping("/basic/request-reverse-response")
