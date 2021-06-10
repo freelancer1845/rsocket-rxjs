@@ -176,7 +176,11 @@ export function decodeMessageRoute(data: Uint8Array): string {
 }
 
 export function encodeMessageRoute(route: string): Uint8Array {
-    return stringToUtf8ArrayBuffer(String.fromCharCode(route.length) + route);
+    const routeBuffer = stringToUtf8ArrayBuffer(route);
+    const buffer = new Uint8Array(1 + routeBuffer.byteLength);
+    buffer[0] = routeBuffer.byteLength;
+    buffer.set(routeBuffer, 1);
+    return buffer;
 }
 
 

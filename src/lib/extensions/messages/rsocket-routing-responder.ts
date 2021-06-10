@@ -30,6 +30,14 @@ export class RequestStreamMapping implements RouteMapping {
     ) { }
 }
 
+export class RequestFNFMapping implements RouteMapping {
+    constructor(
+        public readonly route: string,
+        public readonly handler: (payload: DecodedPayload) => void,
+        public readonly options?: RSocketEncoderRequestOptions
+    ) { }
+}
+
 
 
 
@@ -41,6 +49,7 @@ export class RSocketRoutingResponder extends EncodingRSocketResponder {
 
     private _requestResponseMappers: RequestResponseMapping[] = [];
     private _requestStreamMappers: RequestStreamMapping[] = [];
+    private _requestFNFMappers: RequestFNFMapping[] = [];
 
     constructor(
         public readonly encodingRSocket: EncodingRSocket
@@ -51,6 +60,7 @@ export class RSocketRoutingResponder extends EncodingRSocketResponder {
     public removeHandler(route: string) {
         this._requestResponseMappers = this._requestResponseMappers.filter(v => v.route != route);
         this._requestStreamMappers = this._requestStreamMappers.filter(v => v.route != route);
+        this._requestFNFMappers = this._requestFNFMappers.filter(v => v.route != route);
     }
 
     public addRequestResponseHandler(
@@ -77,6 +87,18 @@ export class RSocketRoutingResponder extends EncodingRSocketResponder {
             options,
             backpressureStrategy
         ), this._requestStreamMappers);
+    }
+
+    public addRequestFNFHandler(
+        route: string,
+        handler: (payload: DecodedPayload) => void,
+        options?: RSocketEncoderRequestOptions
+    ): void {
+        this.addMapping(new RequestFNFMapping(
+            route,
+            handler,
+            options
+        ), this._requestFNFMappers);
     }
 
 
@@ -125,7 +147,10 @@ export class RSocketRoutingResponder extends EncodingRSocketResponder {
         });
     }
     public handleDecodedFireAndForget(payload: DecodedPayload<any, any>): void {
-        throw new Error("Method not implemented.");
+        const mapper = this.getMapping(this.getTopic(payload), this._requestFNFMappers);
+        log.debug('Executing Request FNF Handler for: ' + mapper.route);
+
+        mapper.handler(payload);
     }
 
 

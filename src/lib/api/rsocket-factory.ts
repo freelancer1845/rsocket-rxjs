@@ -1,18 +1,22 @@
 import { Observable } from 'rxjs';
-import { delay, filter, map, retryWhen, take } from 'rxjs/operators';
+import { delay, filter, retryWhen } from 'rxjs/operators';
 import { RSocketConfig } from '../core/config/rsocket-config';
 import { Payload } from '../core/protocol/payload';
 import { RSocketClient } from '../core/rsocket-client.impl';
 import { Transport } from '../core/transport/transport.api';
 import { WebsocketTransport } from '../core/transport/websocket-transport.impl';
+import { CompositeMetadata } from '../extensions/composite-metadata';
+import { EncodingRSocket } from '../extensions/encoding-rsocket-client';
 import { MessageRoutingRSocket } from '../extensions/messages/message-routing-rsocket';
-import { RSocketResponder, RSocketState } from './rsocket.api';
-import { MimeType, MimeTypeRegistry } from './rsocket-mime.types';
-import { RSocketRoutingResponder } from '../extensions/messages/rsocket-routing-responder';
+import { Authentication } from '../extensions/security/authentication';
 import { WellKnownMimeTypes } from '../extensions/well-known-mime-types';
+import { RSocketState } from './rsocket.api';
 
 
-export class RSocketBuilder {
+/**
+ * A builder that should work with Spring Messaging for RSocket
+ */
+export class SpringRSocketMessagingBuilder {
 
     private _config: RSocketConfig = {
         majorVersion: 1,
@@ -20,32 +24,19 @@ export class RSocketBuilder {
         honorsLease: false,
         keepaliveTime: 30000,
         maxLifetime: 100000,
-        dataMimeType: WellKnownMimeTypes.MESSAGE_X_RSOCKET_AUTHENTICATION_V0.name,
-        metadataMimeType: WellKnownMimeTypes.MESSAGE_X_RSOCKET_COMPOSITE_METDATA_V0.name,
+        dataMimeType: WellKnownMimeTypes.APPLICATION_JSON.name,
+        metadataMimeType: WellKnownMimeTypes.MESSAGE_X_RSOCKET_COMPOSITE_METADATA_V0.name,
         setupPayload: undefined
     }
 
-    private _connectionString: string;
-    private _automaticReconnect = false;
-    private _reconnectWaitTime = 5000;
-    private _mimeTypeRegistry = MimeTypeRegistry.defaultRegistry();
+    private _setupData: any;
+    private _setupMetdata = new CompositeMetadata();
 
-    public configureMimeTypeRegistry(configurer: (registry: any) => void) {
-        configurer(this._mimeTypeRegistry);
-        return this;
-    }
+    private _connectionString: string;
 
     public keepaliveTime(time: number) {
         this._config.keepaliveTime = time;
         return this;
-    }
-
-    public resumeIdentificationToken(token: Uint8Array): RSocketBuilder {
-        throw new Error('Resume not Implemented');
-    }
-
-    public honorsLease(): RSocketBuilder {
-        throw new Error('Lease Honoring not Implemented');
     }
 
     public maxLifetime(time: number) {
@@ -58,48 +49,90 @@ export class RSocketBuilder {
         return this;
     }
 
-
-    public metaDataMimeType(type: string) {
-        this._config.metadataMimeType = type;
+    public connectMappingRoute(route: string) {
+        this._setupMetdata.route = route;
         return this;
     }
 
+    public connectMappingData(data: any) {
+        this._setupData = data;
+        return this;
+    }
+
+    public connectAuthentication(authentication: Authentication) {
+        this._setupMetdata.authentication = authentication;
+        return this;
+    }
 
     public connectionString(str: string) {
         this._connectionString = str;
         return this;
     }
 
+    private getSetupConfig(socket: EncodingRSocket): RSocketConfig {
+
+        return {
+            ...this._config,
+            setupPayload: new Payload(
+                socket.tryEncodeObject(this._setupData, this._config.dataMimeType),
+                socket.tryEncodeObject(this._setupMetdata, WellKnownMimeTypes.MESSAGE_X_RSOCKET_COMPOSITE_METADATA_V0.name)
+            )
+        }
+
+    }
+
+    private _encodingCustomizer: (encodingSocket: EncodingRSocket) => void = s => { };
+
+    public customizeEncoding(encodingSocketConsumer: (encodingSocket: EncodingRSocket) => void) {
+        this._encodingCustomizer = encodingSocketConsumer;
+        return this;
+    }
+
+    private _preConnectionRoutesCustomizer: (messageRoutSocket: MessageRoutingRSocket) => void = s => { };
+
+    public customizeMessageRoutingRSocket(socketConsumer: (messageRoutingSocket: MessageRoutingRSocket) => void) {
+        this._preConnectionRoutesCustomizer = socketConsumer;
+        return this;
+    }
+
+    private _automaticReconnect = false;
+    private _reconnectWaitTime = 5000;
     public automaticReconnect(waitTime: number = 5000) {
         this._automaticReconnect = true;
         this._reconnectWaitTime = waitTime;
         return this;
     }
 
-    public setupData(data: Payload) {
-        this._config.setupPayload = data;
-        return this;
-    }
 
+    /**
+     * 
+     * This establishes the connection on subscribe.
+     * Note that this observable will never complete.
+     * Unsubscribing will close the connection.
+     * 
+     * To add route mappings before the connection is established use 'customizeMessageRoutingRSocket'.
+     * 
+     * To customize encoders use 'customizeEncoding'
+     * 
+     * @returns 
+     */
+    public build(): Observable<MessageRoutingRSocket> {
 
-    // public messageRSocket(): Observable<MessageRoutingRSocket> {
-    //     // const responder = new RSocketRoutingResponder(this._mimeTypeRegistry);
-    //     return this.buildClient(responder).pipe(map(client => {
+        const obs = new Observable<MessageRoutingRSocket>(observer => {
 
-    //         return new MessageRoutingRSocket(responder, new RSocketRoutingRequester(client));
-    //     }));
-    // }
-
-
-    private buildClient(responder: RSocketResponder): Observable<RSocketClient> {
-        const obs: Observable<RSocketClient> = new Observable<RSocketClient>(emitter => {
             const transport = this.buildTransport();
-            const client = new RSocketClient(transport, responder, this._mimeTypeRegistry);
-            emitter.next(client);
-            client.establish(this._config);
-            const stateSub = client.state().pipe(filter(s => s == RSocketState.Error)).subscribe(s => emitter.error(new Error("RSocket failed")));
+            const rsocket = new RSocketClient(transport, undefined, undefined);
+            const encodingSocket = new EncodingRSocket(rsocket);
+            this._encodingCustomizer(encodingSocket);
+            rsocket.setSetupConfig(this.getSetupConfig(encodingSocket));
+            const messageSocket = new MessageRoutingRSocket(encodingSocket);
+            this._preConnectionRoutesCustomizer(messageSocket);
+            observer.next(messageSocket);
+            rsocket.establish();
+
+            const stateSub = rsocket.state().pipe(filter(s => s == RSocketState.Error)).subscribe(s => observer.error(new Error("RSocket failed")));
             return () => {
-                client.close();
+                messageSocket.close();
                 stateSub.unsubscribe();
             };
         });
@@ -109,7 +142,9 @@ export class RSocketBuilder {
         } else {
             return obs;
         }
+
     }
+
 
     private buildTransport(): Transport {
         if (this._connectionString.match("^(ws:)|(wss:)\/\/.*$") != null) {
@@ -119,8 +154,6 @@ export class RSocketBuilder {
             throw new Error("Currently only supports websocket. Connection string must be 'ws://...'");
         }
     }
-
-
 }
 
 

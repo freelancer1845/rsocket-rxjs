@@ -48,6 +48,20 @@ export class CompositeMetadata implements Iterable<DecodedMetadata>{
         return this._array.find(v => v.mimeType == WellKnownMimeTypes.MESSAGE_X_RSOCKET_ROUTING_V0.name)?.data as string;
     }
 
+    public set route(value: string | undefined) {
+        if (value != undefined) {
+            this._array.push({
+                mimeType: WellKnownMimeTypes.MESSAGE_X_RSOCKET_ROUTING_V0.name,
+                data: value
+            });
+        } else {
+            let routeIdx = this._array.findIndex(v => v.mimeType !== WellKnownMimeTypes.MESSAGE_X_RSOCKET_ROUTING_V0.name);
+            if (routeIdx != -1) {
+                this._array.splice(routeIdx, 1);
+            }
+        }
+    }
+
     public get authentication(): Authentication | undefined {
         return this._array.find(v => v.mimeType === WellKnownMimeTypes.MESSAGE_X_RSOCKET_AUTHENTICATION_V0.name)?.data as Authentication;
     }

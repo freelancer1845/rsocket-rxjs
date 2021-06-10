@@ -32,6 +32,10 @@ public class TestController {
         }
     }
 
+    @ConnectMapping("register-client")
+    public void connectClientExampleTest(RSocketRequester requester, @Payload String message) {
+        System.out.println(message);
+    }
 
     @MessageMapping("/basic/request-response")
     public Mono<String> basicRequestResponse(String request) {
@@ -73,6 +77,11 @@ public class TestController {
     @MessageMapping("/basic/request-fnf/check")
     public Mono<String> fnfCheck() {
         return Mono.just(this.fnfCommand);
+    }
+
+    @MessageMapping("/basic/fnf-reverse-request-response")
+    public void reverseFnfRequestResponse(Request request, RSocketRequester requester) {
+        requester.route(request.topic).data("\"" + request.data+ "\"").retrieveMono(String.class).subscribe();
     }
 
     @MessageMapping("/basic/request-reverse-response")

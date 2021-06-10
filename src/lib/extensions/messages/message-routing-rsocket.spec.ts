@@ -15,16 +15,7 @@ describe("request_patterns", () => {
     let socket: MessageRoutingRSocket;
     beforeAll(done => {
         const transport = new WebsocketTransport("ws://localhost:8080/rsocket");
-        const client = new RSocketClient(transport, undefined);
-        const encodingClient = new EncodingRSocket(client);
-        socket = new MessageRoutingRSocket(encodingClient);
-        const responder = socket.responder;
-        // responder.addRequestResponseHandler('/basic/setup-payload', ans => {
-        //     expect(ans).toEqual('Test-Client');
-        //     done();
-        //     return ans;
-        // })
-        client.establish({
+        const client = new RSocketClient(transport, undefined, {
             setupPayload: new Payload(new Uint8Array(0)),
             // setupPayload: new Payload(
             //     encodeJson(stringToUtf8ArrayBuffer('Test-Client'), encodingClient),
@@ -42,6 +33,15 @@ describe("request_patterns", () => {
             minorVersion: 0,
             maxLifetime: 100000,
         });
+        const encodingClient = new EncodingRSocket(client);
+        socket = new MessageRoutingRSocket(encodingClient);
+        const responder = socket.responder;
+        // responder.addRequestResponseHandler('/basic/setup-payload', ans => {
+        //     expect(ans).toEqual('Test-Client');
+        //     done();
+        //     return ans;
+        // })
+        client.establish();
         done();
     })
     it("Returns Request Response payload", done => {

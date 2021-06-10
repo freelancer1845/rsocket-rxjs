@@ -4,7 +4,7 @@
 
 export { RSocketRoutingResponder } from './lib/extensions/messages/rsocket-routing-responder';
 
-export { RSocketBuilder } from './lib/api/rsocket-factory';
+export { SpringRSocketMessagingBuilder } from './lib/api/rsocket-factory';
 
 
 export { MessageRoutingRSocket } from './lib/extensions/messages/message-routing-rsocket';

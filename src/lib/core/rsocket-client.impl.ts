@@ -16,7 +16,6 @@ export class RSocketClient implements RSocket<Payload, Payload> {
 
     private _state: BehaviorSubject<RSocketState> = new BehaviorSubject<RSocketState>(RSocketState.Disconnected);
     private _incoming: Subject<Frame> = new Subject();
-    private _config: RSocketConfig | undefined;
 
     private streamIdsHolder: number[] = [];
     private streamIdCounter = 0;
@@ -28,9 +27,15 @@ export class RSocketClient implements RSocket<Payload, Payload> {
     constructor(
         private readonly transport: Transport,
         public readonly responder: RSocketResponder,
+        private _config: RSocketConfig
     ) {
         this.incomingHandlerSetup();
     }
+
+    setSetupConfig(config: RSocketConfig) {
+        this._config = config;
+    }
+
     getSetupConfig(): RSocketConfig {
         return this._config;
     }
@@ -39,8 +44,7 @@ export class RSocketClient implements RSocket<Payload, Payload> {
     }
 
 
-    public establish(config: RSocketConfig): void {
-        this._config = config;
+    public establish(): void {
         this.transport.incoming().pipe(
             takeUntil(this.$destroy)
         ).subscribe({
@@ -58,8 +62,8 @@ export class RSocketClient implements RSocket<Payload, Payload> {
                 this._state.next(RSocketState.Disconnected);
             }
         });
-        const setupFrame = FrameBuilder.setup().buildFromConfig(config);
-        if (config.honorsLease == false) {
+        const setupFrame = FrameBuilder.setup().buildFromConfig(this._config);
+        if (this._config.honorsLease == false) {
             protocolLog.debug('Sending Setup frame without honoring lease...');
             this.transport.send(setupFrame);
             this._state.next(RSocketState.Connected);

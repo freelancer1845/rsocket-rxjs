@@ -33,41 +33,7 @@ Basic library implementing RSockets RC 1 (Version 1.0).
   * Most MimeTypes
 * The library is also not deeply tested, but works well for my projects (which is always a Spring Boot - Angular Stack)
 
-## How to use as simple Message Routing RSocket without the RSocketFactory
+## How to use with SpringBoot RSocket Messaging and SpringRSocketMessagingBuilder
 
-```typescript
-const mimeTypeRegistry = MimeTypeRegistry.defaultRegistry();
-const transport = new WebsocketTransport("ws://localhost:8080/rsocket"); // This is currently the only supported transport
-const responder = new RSocketRoutingResponder(mimeTypeRegistry); // this is a routing responder using MESSAGE_X_RSOCKET_COMPOSITE_METADATA. You can register your routes with this responder
-const client = new RSocketClient(transport, responder, mimeTypeRegistry); // The client that handles the socket/transport
-const requester = new RSocketRoutingRequester(client); // A requester that wraps the client and allows for routed requests
-
-// Add handler for route "test"
-responder.addRequestResponseHandler('test', ans => {
-    console.log('Received a request on route "test"');
-    return ans + ans;
-})
-
-// Establish connection
-client.establish({
-    data: 'Test-Client',
-    dataMimeType: MimeType.APPLICATION_JSON,
-    metadataMimeType: MimeType.MESSAGE_X_RSOCKET_COMPOSITE_METADATA,
-    metaData: [
-        {
-            type: MimeType.MESSAGE_X_RSOCKET_ROUTING,
-            data: 'connect-client'
-        }
-    ],
-    honorsLease: false,
-    keepaliveTime: 30000,
-    majorVersion: 1,
-    minorVersion: 0,
-    maxLifetime: 100000,
-});
-
-// Execute Request
-requester.requestResponse('test', { request: 'Hello', data: 'World' }, MimeType.APPLICATION_JSON, MimeType.APPLICATION_JSON)
-    .subscribe({ next: ans => console.log(ans) });
-
-```
+* See **example-tests/spring-boot-messaging.spec.ts**
+* To run the tests the **spring-test** application needs to be running (mvn spring-boot:run)

@@ -14,6 +14,7 @@ export interface RoutedPayload extends DecodedPayload {
     route: string;
     authentication?: Authentication;
     metadata?: CompositeMetadata;
+    metadataMimeType?: 'message/x.rsocket.composite-metadata.v0';
 }
 
 export type MessagePayloadType = 'dataOnly' | 'decodedPayload';
@@ -31,19 +32,6 @@ export class MessageRoutingRSocket implements RSocket<RoutedPayload, DecodedPayl
         this._responder = new RSocketRoutingResponder(parent);
         parent.setResponder(this._responder);
 
-        parent.addDecoder({
-            mimeType: WellKnownMimeTypes.MESSAGE_X_RSOCKET_ROUTING_V0.name,
-            decode: decodeMessageRoute
-        }).addEncoder({
-            mimeType: WellKnownMimeTypes.MESSAGE_X_RSOCKET_ROUTING_V0.name,
-            encode: encodeMessageRoute
-        }).addDecoder({
-            mimeType: WellKnownMimeTypes.MESSAGE_X_RSOCKET_AUTHENTICATION_V0.name,
-            decode: decodeAuthentication
-        }).addEncoder({
-            mimeType: WellKnownMimeTypes.MESSAGE_X_RSOCKET_AUTHENTICATION_V0.name,
-            encode: encodeAuthentication
-        });
     }
 
     get responder(): RSocketRoutingResponder {
@@ -51,7 +39,7 @@ export class MessageRoutingRSocket implements RSocket<RoutedPayload, DecodedPayl
     }
 
 
-    simpleRequestResponse(route: string, data?: any, authentication?: Authentication): Observable<any> {
+    simpleRequestResponse<ResponseType = any, RequestType = any>(route: string, data?: RequestType, authentication?: Authentication): Observable<ResponseType> {
         return this.requestResponse({
             route: route,
             data: data,
@@ -76,7 +64,7 @@ export class MessageRoutingRSocket implements RSocket<RoutedPayload, DecodedPayl
         }
     }
 
-    simpleRequestStream(route: string, data?: any, requester?: Observable<number>, authentication?: Authentication): Observable<any> {
+    simpleRequestStream<ResponseType = any, RequestType = any>(route: string, data?: RequestType, requester?: Observable<number>, authentication?: Authentication): Observable<ResponseType> {
         return this.requestStream({
             route: route,
             data: data,
@@ -180,6 +168,20 @@ export class MessageRoutingRSocket implements RSocket<RoutedPayload, DecodedPayl
             route,
             this._createMappingHandler(handler, options),
             options?.encodingOptions
+        );
+    }
+
+    public addFireAndForgetHandler<RequestType = any>(
+        route: string,
+        handler: (requestData: RequestType, metadata?: CompositeMetadata) => void,
+        options?: RSocketEncoderRequestOptions
+    ) {
+        this.responder.addRequestFNFHandler(
+            route,
+            (payload) => {
+                handler(payload.data, payload.metadata);
+            },
+            options
         );
     }
 
