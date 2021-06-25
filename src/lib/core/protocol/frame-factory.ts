@@ -75,6 +75,7 @@ export class FrameBuilder {
             const newBuffer = new ArrayBuffer(targetLength);
             new Uint8Array(newBuffer).set(new Uint8Array(this.buffer));
             this.buffer = newBuffer;
+            this.view = new DataView(this.buffer);
         }
     }
 
