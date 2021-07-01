@@ -16,6 +16,6 @@ export { RSocketRoutingResponder } from './lib/extensions/messages/rsocket-routi
 export { RSocketClient } from './lib/core/rsocket-client.impl';
 export { EncodingRSocket, DecodedPayload, RSocketEncoderRequestOptions, RSocketDecoder, RSocketEncoder } from './lib/extensions/encoding-rsocket-client';
 export { MessageRoutingRSocket, RoutedPayload, MessageRoutingOptions } from './lib/extensions/messages/message-routing-rsocket';
-
+export { RSocketState } from './lib/api/rsocket.api';
 export { RSocketConfig } from './lib/core/config/rsocket-config';
 export { WellKnownMimeTypes } from './lib/extensions/well-known-mime-types';
