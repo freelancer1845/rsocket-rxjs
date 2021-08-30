@@ -19,7 +19,7 @@ export class WebsocketTransport implements Transport {
     private subject: WebSocketSubject<any>;
 
     private _closed = new ReplaySubject<void>();
-    
+
 
     constructor(private readonly url: string) {
         log.debug(`Constructing websocket with target url ${url}`);
@@ -51,6 +51,10 @@ export class WebsocketTransport implements Transport {
                 error: err => log.error('Error', err)
             }
         });
+
+        if (typeof window !== "undefined") {
+            window.addEventListener('unload', event => this.close().subscribe());
+        } 
     }
     close(): Observable<void> {
         return defer(() => {
@@ -58,6 +62,9 @@ export class WebsocketTransport implements Transport {
             //     this.subject.complete();
             // }
             this._closed.complete();
+            if (this.subject != undefined) {
+                this.subject.complete();
+            }
             return this._closed;
         })
     }
@@ -74,7 +81,7 @@ export class WebsocketTransport implements Transport {
             }
             return frame;
         }),
-        takeUntil(this._closed)
+            takeUntil(this._closed)
         );
     }
     public send(frame: Frame): void {
