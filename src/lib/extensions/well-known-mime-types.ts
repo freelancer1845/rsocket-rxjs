@@ -45,6 +45,11 @@ export class WellKnownMimeTypes {
         identifier: 0x06
     }
 
+    public static APPLICATION_VND_GOOGLE_PROTOBUF: WellKnownMimeType = {
+        name: 'application/vnd.google.protobuf',
+        identifier: 0x09
+    }
+
     private static initialized = false;
     private static _identifierMap = new Map<number, WellKnownMimeType>();
     private static _nameMap = new Map<string, WellKnownMimeType>();

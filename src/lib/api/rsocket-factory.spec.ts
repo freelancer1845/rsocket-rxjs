@@ -1,7 +1,7 @@
 import { Subscription } from 'rxjs';
 import { concatMap } from 'rxjs/operators';
 import { WellKnownMimeTypes } from '../extensions/well-known-mime-types';
-import { stringToUtf8ArrayBuffer } from '../utlities/conversions';
+import { arrayBufferToUtf8String, stringToUtf8ArrayBuffer } from '../utlities/conversions';
 import { SpringRSocketMessagingBuilder } from './rsocket-factory';
 
 
@@ -65,4 +65,23 @@ describe("SpringRSocketMessagingBuilder", () => {
             });
         setTimeout(() => subscription.unsubscribe(), 3000);
     });
+    it("Can handle a custom data mime type", done => {
+        const subscription = new SpringRSocketMessagingBuilder().connectionString('ws://localhost:8080/rsocket')
+            .dataMimeType("application/stringreverse")
+            .customizeEncoding(encoder => {
+                encoder.addEncoder({
+                    mimeType: "application/stringreverse",
+                    encode: buf => stringToUtf8ArrayBuffer(buf),
+                });
+                encoder.addDecoder({
+                    mimeType: "application/stringreverse",
+                    decode: buf => arrayBufferToUtf8String(buf)
+                })
+            })
+            .build().subscribe(socket => {
+                socket.simpleRequestResponse("/basic/mime/stringreverse", "Hello").subscribe(v => done());
+            });
+        setTimeout(() => subscription.unsubscribe(), 3000);
+    }
+    );
 });
