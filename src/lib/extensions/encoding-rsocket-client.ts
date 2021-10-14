@@ -4,6 +4,7 @@ import { RSocket, RSocketResponder, RSocketState } from "../api/rsocket.api";
 import { RSocketConfig } from "../core/config/rsocket-config";
 import { Payload } from "../core/protocol/payload";
 import { decodeAuthentication, decodeCompositeMetadata, decodeJson, decodeMessageAcceptMimeTypes, decodeMessageMimeType, decodeMessageRoute, encodeAuthentication, encodeCompositionMetadata, encodeJson, encodeMessageAcceptMimeTypes, encodeMessageMimeType, encodeMessageRoute } from "./encoder/message-x-rsocket";
+import { TextCoding } from "./encoder/text.encoder";
 import { WellKnownMimeTypes } from "./well-known-mime-types";
 
 
@@ -89,6 +90,14 @@ export class EncodingRSocket implements RSocket<DecodedPayload, DecodedPayload, 
             }).addEncoder({
                 mimeType: WellKnownMimeTypes.MESSAGE_X_RSOCKET_AUTHENTICATION_V0.name,
                 encode: encodeAuthentication
+            })
+            .addDecoder({
+                mimeType: WellKnownMimeTypes.TEXT_PLAIN.name,
+                decode: TextCoding.Plain.decoder
+            })
+            .addEncoder({
+                mimeType: WellKnownMimeTypes.TEXT_PLAIN.name,
+                encode: TextCoding.Plain.encoder
             });
     }
 

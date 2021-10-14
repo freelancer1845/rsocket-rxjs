@@ -10,6 +10,11 @@ interface WellKnownMimeType {
 
 export class WellKnownMimeTypes {
 
+    public static TEXT_PLAIN: WellKnownMimeType = {
+        name: 'text/plain',
+        identifier: 0x21,
+    }
+
     public static MESSAGE_X_RSOCKET_COMPOSITE_METADATA_V0: WellKnownMimeType = {
         name: 'message/x.rsocket.composite-metadata.v0',
         identifier: 0x7F,
