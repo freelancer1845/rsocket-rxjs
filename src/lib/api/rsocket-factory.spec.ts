@@ -50,7 +50,7 @@ describe("SpringRSocketMessagingBuilder", () => {
                     topic: '/basic/request-response',
                     data: 'empty'
                 }).subscribe();
-                setTimeout(() => subscription.unsubscribe(), 100);
+                setTimeout(() => subscription.unsubscribe(), 400);
             });
     });
     it("Does automatic reconnect", done => {

@@ -12,4 +12,5 @@ export interface RSocketConfig {
     resumeIdentificationToken?: Uint8Array;
     honorsLease: boolean;
     setupPayload: Payload;
+    fragmentSize: number;
 }

@@ -32,6 +32,7 @@ describe("request_patterns", () => {
             majorVersion: 1,
             minorVersion: 0,
             maxLifetime: 100000,
+            fragmentSize: 50 * 1024,
         });
         socket = new EncodingRSocket(client);
         client.establish();

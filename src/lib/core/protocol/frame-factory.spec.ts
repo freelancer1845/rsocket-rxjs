@@ -10,10 +10,10 @@ describe('Frame builder', () => {
         );
         const frame = FrameBuilder.requestStream()
             .streamId(0)
-            .payload(fakePayload)
+            .payload(fakePayload, 1000000)
             .requests(20)
             .build();
 
-        expect(frame.requests()).toBe(20);
+        expect(frame[0].requests()).toBe(20);
     });
 });

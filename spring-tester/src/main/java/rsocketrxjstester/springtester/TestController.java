@@ -9,6 +9,7 @@ import org.springframework.messaging.rsocket.RSocketRequester;
 import org.springframework.messaging.rsocket.annotation.ConnectMapping;
 import org.springframework.stereotype.Controller;
 
+import io.netty.buffer.ByteBuf;
 import lombok.Data;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -27,7 +28,8 @@ public class TestController {
         if (client == null) {
             System.out.println("No setup payload provided");
         } else {
-            requester.route("/basic/setup-payload").data(client).retrieveMono(String.class).subscribe(response -> System.out.println(response));
+            requester.route("/basic/setup-payload").data(client).retrieveMono(String.class)
+                    .subscribe(response -> System.out.println(response));
             System.out.println(client);
         }
     }
@@ -96,10 +98,9 @@ public class TestController {
 
     @MessageMapping("/basic/request-reverse-stream")
     public Mono<Integer> reverseRequestStream(Request request, RSocketRequester requester) {
-        return requester.route(request.topic).data(request.data).retrieveFlux(Integer.class).limitRate(5).reduce(0,
-                (a, v) -> {
-                    return Integer.valueOf(a + v);
-                });
+        return requester.route(request.topic).data(request.data).retrieveFlux(Integer.class).reduce(0, (a, v) -> {
+            return Integer.valueOf(a + v);
+        });
     }
 
     @MessageMapping("/basic/disconnect")
@@ -110,6 +111,11 @@ public class TestController {
     @MessageMapping("/basic/mime/stringreverse")
     public Mono<String> target(String message) {
         return Mono.just(message);
+    }
+
+    @MessageMapping("/basic/request-response/byte")
+    public Mono<byte[]> requestResponseBuf(byte[] buffer) {
+        return Mono.just(buffer);
     }
 
     @Data

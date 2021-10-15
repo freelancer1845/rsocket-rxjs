@@ -26,7 +26,8 @@ export class SpringRSocketMessagingBuilder {
         maxLifetime: 100000,
         dataMimeType: WellKnownMimeTypes.APPLICATION_JSON.name,
         metadataMimeType: WellKnownMimeTypes.MESSAGE_X_RSOCKET_COMPOSITE_METADATA_V0.name,
-        setupPayload: undefined
+        setupPayload: undefined,
+        fragmentSize: 16777215      // 16mb
     }
 
     private _setupData: any;
@@ -66,6 +67,11 @@ export class SpringRSocketMessagingBuilder {
 
     public connectionString(str: string) {
         this._connectionString = str;
+        return this;
+    }
+
+    public fragmentMaxSize(sizeInBytes: number) {
+        this._config.fragmentSize = sizeInBytes;
         return this;
     }
 

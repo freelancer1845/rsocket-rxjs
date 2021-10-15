@@ -83,12 +83,12 @@ export class RSocketClient implements RSocket<Payload, Payload> {
             filter(f => f.type() == FrameType.REQUEST_RESPONSE),
             mergeMap(f => this.incomingRequestResponse(f)),
             takeUntil(this.$destroy)
-        ).subscribe(frame => this.transport.send(frame));
+        ).subscribe(frames => frames.forEach(frame => this.transport.send(frame), this));
         this._incoming.pipe(
             filter(f => f.type() == FrameType.REQUEST_STREAM),
             mergeMap(f => this.incomingRequestStream(f)),
             takeUntil(this.$destroy)
-        ).subscribe(frame => this.transport.send(frame));
+        ).subscribe(frames => frames.forEach(frame => this.transport.send(frame), this));
         this._incoming.pipe(
             filter(f => f.type() == FrameType.REQUEST_FNF),
             takeUntil(this.$destroy)
@@ -138,12 +138,12 @@ export class RSocketClient implements RSocket<Payload, Payload> {
                 emitter.complete();
                 subscription.unsubscribe();
             });
-
-            this.transport.send(FrameBuilder.requestResponse().streamId(streamId).payload(payload).build());
+            const sendContext = new FragmentContext();
+            FrameBuilder.requestResponse().streamId(streamId).payload(payload, this._config.fragmentSize).build().forEach(frame => this.transport.send(frame), this);
             return () => {
                 if (subscription.closed == false) {
                     subscription.unsubscribe();
-                    this.transport.send(FrameBuilder.cancel().streamId(streamId).build());
+                    FrameBuilder.cancel().streamId(streamId).build().forEach(frame => this.transport.send(frame), this);
                 }
             }
         });
@@ -199,21 +199,21 @@ export class RSocketClient implements RSocket<Payload, Payload> {
                 emitter.complete();
             });
             if (requester === undefined) {
-                this.transport.send(FrameBuilder.requestStream().streamId(streamId).payload(payload).requests(2 ** 31 - 1).build());
+                FrameBuilder.requestStream().streamId(streamId).payload(payload, this._config.fragmentSize).requests(2 ** 31 - 1).build().forEach(frame => this.transport.send(frame), this);
             } else {
                 let initialRequest = true;
                 requester.pipe(takeUntil($requestDestroy)).subscribe(requests => {
                     if (initialRequest == true) {
                         initialRequest = false;
-                        this.transport.send(FrameBuilder.requestStream().streamId(streamId).payload(payload).requests(requests).build());
+                        FrameBuilder.requestStream().streamId(streamId).payload(payload, this._config.fragmentSize).requests(requests).build().forEach(frame => this.transport.send(frame), this);
                     } else {
-                        this.transport.send(FrameBuilder.requestN().streamId(streamId).requests(requests).build());
+                        FrameBuilder.requestN().streamId(streamId).requests(requests).build().forEach(frame => this.transport.send(frame), this);
                     }
                 });
             }
             return () => {
                 $requestDestroy.next(0);
-                this.transport.send(FrameBuilder.cancel().streamId(streamId).build());
+                FrameBuilder.cancel().streamId(streamId).build().forEach(frame => this.transport.send(frame), this);
             }
         });
 
@@ -231,12 +231,12 @@ export class RSocketClient implements RSocket<Payload, Payload> {
         this._state.pipe(filter(s => s == RSocketState.Connected), take(1)).subscribe(s => {
             protocolLog.debug("Executing Request FNF");
             const streamId = this.getNewStreamId();
-            this.transport.send(FrameBuilder.requestFNF().streamId(streamId).payload(payload).build());
+            FrameBuilder.requestFNF().streamId(streamId).payload(payload, this._config.fragmentSize).build().forEach(frame => this.transport.send(frame), this);
         });
     }
 
 
-    private incomingRequestResponse(f: Frame): Observable<Frame> {
+    private incomingRequestResponse(f: Frame): Observable<Frame[]> {
         protocolLog.debug('Handling incoming Request Response request');
         return this.responder.handleRequestResponse(f.payload()).pipe(
             takeUntil(this._incoming.pipe(
@@ -247,7 +247,7 @@ export class RSocketClient implements RSocket<Payload, Payload> {
             map(p => {
                 switch (p.kind) {
                     case "N":
-                        return Notification.createNext(FrameBuilder.payload().streamId(f.streamId()).payload(p.value).flagComplete().flagNext().build());
+                        return Notification.createNext(FrameBuilder.payload().streamId(f.streamId()).payload(p.value, this._config.fragmentSize).flagComplete().flagNext().build());
                     case "E":
                         return Notification.createNext(FrameBuilder.error().errorCode(ErrorCode.APPLICATION_ERROR).message(p.error.message).streamId(f.streamId()).build());
                     case "C":
@@ -258,7 +258,7 @@ export class RSocketClient implements RSocket<Payload, Payload> {
         );
     }
 
-    private incomingRequestStream(f: Frame): Observable<Frame> {
+    private incomingRequestStream(f: Frame): Observable<Frame[]> {
         protocolLog.debug('Handling incoming Request Stream request');
         const handler = this.responder.handleRequestStream(f.payload());
         let requests = f.initialRequests();
@@ -310,14 +310,14 @@ export class RSocketClient implements RSocket<Payload, Payload> {
                 switch (p.kind) {
                     case "N":
                         requests--;
-                        return Notification.createNext(FrameBuilder.payload().streamId(f.streamId()).payload(p.value as Payload).flagNext().build())
+                        return Notification.createNext(FrameBuilder.payload().streamId(f.streamId()).payload(p.value as Payload, this._config.fragmentSize).flagNext().build())
                     case "E":
                         signalComplete.next(0);
-                        this.transport.send(FrameBuilder.error().errorCode(ErrorCode.APPLICATION_ERROR).message(p.error.message).streamId(f.streamId()).build());
+                        FrameBuilder.error().errorCode(ErrorCode.APPLICATION_ERROR).message(p.error.message).streamId(f.streamId()).build().forEach(frame => this.transport.send(frame), this);
                         return Notification.createComplete();
                     case "C":
                         signalComplete.next(0);
-                        this.transport.send(FrameBuilder.payload().streamId(f.streamId()).flagComplete().build());
+                        FrameBuilder.payload().streamId(f.streamId()).flagComplete().build().forEach(frame => this.transport.send(frame), this);
                         return Notification.createComplete();
                 }
             }),
@@ -370,13 +370,13 @@ export class RSocketClient implements RSocket<Payload, Payload> {
                 error: error => emitter.error(error),
             });
             const keepaliveFrame = FrameBuilder.keepalive().flagRespond().lastReceivedPosition(this.transport.recvPosition()).data(data).build();
-            this.transport.send(keepaliveFrame);
+            keepaliveFrame.forEach(frame => this.transport.send(frame), this);
             return () => sub.unsubscribe()
         }).pipe(takeUntil(this.$destroy), repeatWhen(() => interval(this._config.keepaliveTime))).subscribe();
 
         this._incoming.pipe(takeUntil(this.$destroy), filter(p => p.type() == FrameType.KEEPALIVE && p.respondWithKeepalive() == true)).subscribe(p => {
             const keepaliveAnswer = FrameBuilder.keepalive().lastReceivedPosition(this.transport.recvPosition()).data(p.payload().data).build();
-            this.transport.send(keepaliveAnswer);
+            keepaliveAnswer.forEach(frame => this.transport.send(frame), this);
         });
     }
 

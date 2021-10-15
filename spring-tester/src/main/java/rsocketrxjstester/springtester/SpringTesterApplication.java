@@ -10,6 +10,7 @@ import org.reactivestreams.Publisher;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.rsocket.messaging.RSocketStrategiesCustomizer;
+import org.springframework.boot.rsocket.server.RSocketServerCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.ResolvableType;
@@ -31,9 +32,16 @@ public class SpringTesterApplication {
 	}
 
 	@Bean
+	public RSocketServerCustomizer rSocketServerCustomizer() {
+		return server -> {
+			server.fragment(1024 * 64);
+		};
+	}
+
+	@Bean
 	public RSocketStrategiesCustomizer rSocketStrategiesCustomizer() {
 		return strategies -> {
-			strategies.encoder(new Encoder<String>() {	
+			strategies.encoder(new Encoder<String>() {
 
 				@Override
 				public boolean canEncode(ResolvableType elementType, MimeType mimeType) {
@@ -55,7 +63,7 @@ public class SpringTesterApplication {
 
 				@Override
 				public List<MimeType> getEncodableMimeTypes() {
-					return Collections.singletonList(new MimeType("application","stringreverse"));
+					return Collections.singletonList(new MimeType("application", "stringreverse"));
 				}
 
 			});
@@ -107,7 +115,7 @@ public class SpringTesterApplication {
 
 				@Override
 				public List<MimeType> getDecodableMimeTypes() {
-					return Collections.singletonList(new MimeType("application","stringreverse"));
+					return Collections.singletonList(new MimeType("application", "stringreverse"));
 				}
 
 			});

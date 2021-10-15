@@ -32,6 +32,7 @@ describe("request_patterns", () => {
             majorVersion: 1,
             minorVersion: 0,
             maxLifetime: 100000,
+            fragmentSize: 50 * 1024
         });
         const encodingClient = new EncodingRSocket(client);
         socket = new MessageRoutingRSocket(encodingClient);
@@ -146,7 +147,9 @@ describe("request_patterns", () => {
             topic: '/basic/request-response',
             data: 42
         }).subscribe(ans => {
-            range(0, 42).pipe(reduce((a, b) => a + b, 0)).subscribe(result => expect(ans).toEqual(result), null, () => done());
+            range(0, 42).pipe(reduce((a, b) => a + b, 0)).subscribe(result => expect(ans).toEqual(result), err => {
+                fail(err);
+            }, () => done());
         })
     });
     it("Authenticates using simple authentication on request-response", done => {
@@ -236,6 +239,23 @@ describe("request_patterns", () => {
         }, err => {
             expect(err.message).toMatch(/^Error: 513.+$/);
             done();
+        });
+    });
+    it("Send fragments", done => {
+        jest.setTimeout(20000);
+        const databuffer = new Uint8Array(50 * 1024);
+        for (let i = 0; i < databuffer.length; i++) {
+            databuffer[i] = Math.floor(Math.random() * 100);
+        }
+        socket.simpleRequestResponse('/basic/request-response/byte',
+            databuffer,
+        ).subscribe(ans => {
+            for (let i = 0; i < databuffer.length; i++) {
+                expect(ans[i]).toEqual(databuffer[i]);
+            }
+            done();
+        }, err => {
+            fail(err.message);
         });
     });
     // it("Accepts application/octet-stream mime type", done => {

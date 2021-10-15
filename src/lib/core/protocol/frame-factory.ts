@@ -10,6 +10,7 @@ export class FrameBuilder {
     protected view: DataView;
     protected writerIndex: number;
 
+
     protected constructor(initialBufferSize: number = 128) {
         this.buffer = new ArrayBuffer(initialBufferSize);
         this.view = new DataView(this.buffer);
@@ -58,8 +59,8 @@ export class FrameBuilder {
         return new RequestNFrameBuilder();
     }
 
-    public build(): Frame {
-        return new Frame(new Uint8Array(this.buffer, 0, this.writerIndex));
+    public build(): Frame[] {
+        return [new Frame(new Uint8Array(this.buffer, 0, this.writerIndex))];
     }
 
     protected setFrameType(type: FrameType) {
@@ -68,8 +69,12 @@ export class FrameBuilder {
 
     protected requireMinFreeBytes(bytes: number) {
         let targetLength = this.buffer.byteLength;
-        while (this.writerIndex + bytes >= targetLength) {
-            targetLength = 2 * targetLength;
+        if (bytes > 1024) {
+            targetLength = this.writerIndex + bytes;
+        } else {
+            while (this.writerIndex + bytes >= targetLength) {
+                targetLength = 2 * targetLength;
+            }
         }
         if (targetLength > this.buffer.byteLength) {
             const newBuffer = new ArrayBuffer(targetLength);
@@ -209,29 +214,130 @@ export class SetupFrameBuilder extends FrameBuilder {
 
 }
 
+interface PayloadFragment {
+    metadataSize: number;
+    metadataOffset: number;
+    dataSize: number;
+    dataOffset: number;
+}
+
 export class RequestOrPayloadBuilder extends FrameBuilder {
+
+    protected _streamId: number;
+    protected _complete: boolean = false;
+    protected _fragments: RequestOrPayloadBuilder[] = [];
 
     constructor(initialSize?: number) {
         super(initialSize);
+        this._fragments.push(this);
+    }
+
+    public streamId(streamId: number) {
+        this._streamId = streamId;
+        return super.streamId(streamId);
     }
 
 
-    payload(data: Payload) {
-        if (data.hasMetadata()) {
-            this.flagMetadataPresent();
-            this.requireMinFreeBytes(data.metadata.byteLength + 3 + data.data.byteLength);
-            this.directMetadataWrite(data.metadata.byteLength, buffer => {
-                buffer.set(new Uint8Array(data.metadata));
-                return data.metadata.byteLength;
-            });
-        } else {
-            this.requireMinFreeBytes(data.data.byteLength);
+    payload(data: Payload, fragmentationSize) {
+        let metadataSize = (data.hasMetadata() ? data.metadata.byteLength : 0);
+        let dataSize = (data.data ? data.data.byteLength : 0);
+        let payloadSize = metadataSize + dataSize;
+        let payloadFragments: PayloadFragment[] = [];
+        let metadataIdx = 0;
+        let dataIdx = 0;
+        while (payloadSize > 0) {
+            // need to consider fragmentation
+            const fragment: PayloadFragment = {
+                dataSize: 0,
+                dataOffset: dataIdx,
+                metadataSize: 0,
+                metadataOffset: metadataIdx,
+            }
+            if (metadataSize > 0) {
+                if (metadataSize > fragmentationSize) {
+                    fragment.metadataSize = fragmentationSize;
+                    metadataSize -= fragmentationSize;
+                    payloadSize -= fragmentationSize;
+                    metadataIdx += fragmentationSize;
+                } else {
+                    fragment.metadataSize = metadataSize;
+                    payloadSize -= metadataSize;
+                    metadataIdx += metadataSize;
+                    metadataSize = 0;
+                }
+            }
+            let leftOver = fragmentationSize - fragment.metadataSize;
+            if (dataSize > 0) {
+                if (dataSize > leftOver) {
+                    fragment.dataSize = leftOver;
+                    payloadSize -= leftOver;
+                    dataSize -= leftOver;
+                    dataIdx += leftOver;
+                } else {
+                    fragment.dataSize = dataSize;
+                    payloadSize -= dataSize;
+                    dataIdx += dataSize;
+                    dataSize = 0;
+                }
+            }
+            payloadFragments.push(fragment);
         }
-        this.directDataWrite(data.data.byteLength, buffer => {
-            buffer.set(new Uint8Array(data.data));
-            return data.data.byteLength;
-        });
+
+        let currentFrame: RequestOrPayloadBuilder;
+        for (let i = 0; i < payloadFragments.length; i++) {
+            const payloadFragment = payloadFragments[i];
+            if (i == 0) {
+                currentFrame = this;
+            } else {
+                currentFrame = FrameBuilder.payload()
+                    .streamId(this._streamId);
+                if (this._complete == true) {
+                    (currentFrame as PayloadFrameBuilder).flagComplete();
+                }
+                (currentFrame as PayloadFrameBuilder).flagNext();
+                this._fragments.push(currentFrame); // the root frame is already part of fragments to allow frames without payload
+            }
+            if (i < payloadFragments.length - 1) {
+                currentFrame.flagFollows();
+            }
+            if (payloadFragment.metadataSize > 0) {
+                currentFrame.flagMetadataPresent();
+                currentFrame.requireMinFreeBytes(payloadFragment.dataSize + payloadFragment.metadataSize + 3);
+                currentFrame.directMetadataWrite(payloadFragment.metadataSize, buffer => {
+                    buffer.set(new Uint8Array(data.metadata, payloadFragment.metadataOffset, metadataSize));
+                    return payloadFragment.metadataSize;
+                });
+            } else {
+                currentFrame.requireMinFreeBytes(payloadFragment.dataSize);
+            }
+            currentFrame.directDataWrite(payloadFragment.dataSize, buffer => {
+                // const view = new Uint8Array(data.data, payloadFragment.dataOffset, payloadFragment.dataSize);
+                // buffer.set(new Uint8Array(data.data, payloadFragment.dataOffset, payloadFragment.dataSize), 0);
+                buffer.set(data.data.subarray(payloadFragment.dataOffset, payloadFragment.dataOffset + payloadFragment.dataSize), 0);
+                return payloadFragment.dataSize;
+            });
+        }
+
+        // if (data.hasMetadata()) {
+        //     this.flagMetadataPresent();
+        //     this.requireMinFreeBytes(data.metadata.byteLength + 3 + data.data.byteLength);
+        //     this.directMetadataWrite(data.metadata.byteLength, buffer => {
+        //         buffer.set(new Uint8Array(data.metadata));
+        //         return data.metadata.byteLength;
+        //     });
+
+        // } else {
+        //     this.requireMinFreeBytes(data.data.byteLength);
+        // }
+        // this.directDataWrite(data.data.byteLength, buffer => {
+        //     buffer.set(new Uint8Array(data.data));
+        //     return data.data.byteLength;
+        // });
         return this;
+    }
+
+    public build(): Frame[] {
+        return this._fragments.map(frag => new Frame(new Uint8Array(frag.buffer, 0, frag.writerIndex)))
     }
 
     directMetadataWrite(requiredSize: number, writeCall: (buffer: Uint8Array) => number) {
@@ -252,6 +358,12 @@ export class RequestOrPayloadBuilder extends FrameBuilder {
         this.writerIndex += bytesWritten;
         return this;
     }
+
+    flagFollows() {
+        this.view.setUint8(5, this.view.getUint8(5) | (1 << 7));
+        return this;
+    }
+
 
 
 }
@@ -343,6 +455,7 @@ export class PayloadFrameBuilder extends RequestOrPayloadBuilder {
 
     public flagComplete() {
         this.view.setUint8(5, this.view.getUint8(5) | (1 << 6));
+        this._complete = true;
         return this;
     }
 

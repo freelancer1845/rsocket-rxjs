@@ -12,7 +12,8 @@
         ],
         "outDir": "./dist",
         "target": "ES2015",
-        "moduleResolution": "node"
+        "moduleResolution": "node",
+        "esModuleInterop": true
     },
     "include": [
         "src/**/*"

@@ -1,4 +1,5 @@
 import { factory } from '../config-log4j';
+import { Frame } from './frame';
 import { Payload } from './payload';
 
 const log = factory.getLogger("protocol.FragmentsContext");
@@ -31,18 +32,18 @@ export class FragmentContext {
                 dataLength += fragment.data.byteLength;
             }
             let metadataBufferView = new Uint8Array(metdataLength);
-            let dataBufferView = new Uint8Array(metdataLength);
-            let position = 0;
+            let dataBufferView = new Uint8Array(dataLength);
+            let metadataPosition = 0;
+            let dataPosition = 0;
             for (let fragment of this.fragments) {
-                metadataBufferView.set(new Uint8Array(fragment.metadata), position);
-                position += fragment.metadata.byteLength;
-                dataBufferView.set(new Uint8Array(fragment.data), position);
-                position += fragment.data.byteLength;
+                metadataBufferView.set(new Uint8Array(fragment.metadata), metadataPosition);
+                metadataPosition += fragment.metadata.byteLength;
+                dataBufferView.set(new Uint8Array(fragment.data), dataPosition);
+                dataPosition += fragment.data.byteLength;
             }
             this.fragments = [];
             return new Payload(dataBufferView, metadataBufferView);
         }
     }
-
 
 }
