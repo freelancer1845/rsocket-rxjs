@@ -1,4 +1,3 @@
-import { Subscription } from 'rxjs';
 import { concatMap } from 'rxjs/operators';
 import { WellKnownMimeTypes } from '../extensions/well-known-mime-types';
 import { arrayBufferToUtf8String, stringToUtf8ArrayBuffer } from '../utlities/conversions';
